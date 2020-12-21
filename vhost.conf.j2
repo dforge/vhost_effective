@@ -1,0 +1,92 @@
+server {
+    listen       80;
+    server_name  cdfqdn;
+    return       301 https://$server_name$request_uri;
+}
+
+server {
+    # sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /var/www/vhosts/cdnuser/ssl/fqdn.key -out /var/www/vhosts/cdnuser/ssl/fqdn.crt
+    # openssl dhparam -out /etc/pki/nginx/dhparam.pem 4096
+
+    ### #############################################################
+    ssl_protocols               TLSv1.2;
+    ssl_prefer_server_ciphers   on;
+    ssl_dhparam                 /etc/nginx/dhparam.pem;
+    ssl_ciphers                 ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384;
+    ssl_ecdh_curve              secp384r1;
+    ssl_session_timeout         10m;
+    ssl_session_cache           shared:SSL:10m;
+    ssl_session_tickets         off;
+    ssl_stapling                on;
+    ssl_stapling_verify         on;
+
+    resolver                    8.8.8.8 8.8.4.4 valid=300s;
+    resolver_timeout            5s;
+
+    add_header                  X-Frame-Options DENY;
+    add_header                  X-Content-Type-Options nosniff;
+    add_header                  X-XSS-Protection "1; mode=block";
+
+    ssl_certificate             /var/www/vhosts/cdnuser/ssl/ssl.crt;
+    ssl_certificate_key         /var/www/vhosts/cdnuser/ssl/ssl.key;
+
+    ### #############################################################
+    listen      443 ssl http2;
+    server_name cdfqdn;
+    root        /var/www/vhosts/cdnuser/pub;
+    index       index.php index.html index.htm;
+
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    location ~ \.(neon|ini|log|yml|env|sql)$ {
+        deny all;
+    }
+
+    location = /robots.txt  {
+        access_log      off;
+        log_not_found   off;
+    }
+
+    location = /humans.txt  {
+        access_log      off;
+        log_not_found   off;
+    }
+
+    location = /favicon.ico {
+        access_log      off;
+        log_not_found   off;
+    }
+
+    location ~* \.(ogg|ogv|svg|svgz|eot|otf|woff|woff2|mp4|m4v|webm|ttf|js|css|rss|atom|jpg|jpeg|gif|png|webp|ico|zip|tgz|gz|rar|bz2|doc|xls|exe|ppt|tar|mid|midi|wav|bmp|rtf)$ {
+        access_log      off;
+        log_not_found   off;
+        add_header      Cache-Control "public, no-transform, max-age=2628000";
+    }
+
+    location ~ /\. {
+        deny            all;
+        access_log      off;
+        log_not_found   off;
+    }
+
+    if ($request_uri ~* "^.+(readme|license)\.(txt|html)$") {
+        return 403;
+    }
+
+    ### #############################################################
+    location ~ \.php$ {
+        include                 fastcgi_params;
+        fastcgi_param           SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_index           index.php;
+        fastcgi_pass            unix:cdsock;
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        try_files               $uri $uri/ /index.php?$args;
+    }
+
+    ### #############################################################
+    error_page  500 502 503 504 /custom_50x.html;
+    access_log  /var/www/vhosts/cdnuser/logs/access.log;
+    error_log   /var/www/vhosts/cdnuser/logs/error.log warn;
+}
